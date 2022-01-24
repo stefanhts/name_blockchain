@@ -16,7 +16,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Block represents each 'item' in the blockchain
+// Block in chain
 type Block struct {
 	Index     int
 	Timestamp string
@@ -25,15 +25,12 @@ type Block struct {
 	PrevHash  string
 }
 
-// Blockchain is a series of validated Blocks
 var Blockchain []Block
 
-// Message takes incoming JSON payload for writing name
+// JSON payload object
 type Message struct {
 	Name string
 }
-
-//var mutex = &sync.Mutex{}
 
 func main() {
 	err := godotenv.Load()
