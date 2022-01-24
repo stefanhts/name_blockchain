@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -34,7 +33,7 @@ type Message struct {
 	Name string
 }
 
-var mutex = &sync.Mutex{}
+//var mutex = &sync.Mutex{}
 
 func main() {
 	err := godotenv.Load()
@@ -43,26 +42,22 @@ func main() {
 	}
 
 	go func() {
-		t := time.Now()
-		genesisBlock := Block{}
-		genesisBlock = Block{0, t.String(), "", calculateHash(genesisBlock), ""}
-		spew.Dump(genesisBlock)
+		firstBlock := Block{}
+		firstBlock = Block{0, time.Now().String(), "", calcHash(firstBlock), ""}
+		spew.Dump(firstBlock)
 
-		mutex.Lock()
-		Blockchain = append(Blockchain, genesisBlock)
-		mutex.Unlock()
+		Blockchain = append(Blockchain, firstBlock)
 	}()
 	log.Fatal(run())
 
 }
 
-// web server
 func run() error {
 	mux := makeMuxRouter()
 	httpPort := os.Getenv("PORT")
 	log.Println("HTTP Server Listening on port :", httpPort)
 	s := &http.Server{
-		Addr:           ":8080",
+		Addr:           ":" + httpPort,
 		Handler:        mux,
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
@@ -76,7 +71,6 @@ func run() error {
 	return nil
 }
 
-// create handlers
 func makeMuxRouter() http.Handler {
 	muxRouter := mux.NewRouter()
 	muxRouter.HandleFunc("/", handleGetBlockchain).Methods("GET")
@@ -84,7 +78,6 @@ func makeMuxRouter() http.Handler {
 	return muxRouter
 }
 
-// write blockchain when we receive an http request
 func handleGetBlockchain(w http.ResponseWriter, r *http.Request) {
 	bytes, err := json.MarshalIndent(Blockchain, "", "  ")
 	if err != nil {
@@ -94,7 +87,6 @@ func handleGetBlockchain(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, string(bytes))
 }
 
-// takes JSON payload as an input for name
 func handleWriteBlock(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	var msg Message
@@ -106,15 +98,13 @@ func handleWriteBlock(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	mutex.Lock()
 	prevBlock := Blockchain[len(Blockchain)-1]
-	newBlock := generateBlock(prevBlock, msg.Name)
+	newBlock := genBlock(prevBlock, msg.Name)
 
-	if isBlockValid(newBlock, prevBlock) {
+	if isValidBlock(newBlock, prevBlock) {
 		Blockchain = append(Blockchain, newBlock)
 		spew.Dump(Blockchain)
 	}
-	mutex.Unlock()
 
 	respondWithJSON(w, r, http.StatusCreated, newBlock)
 
@@ -124,15 +114,13 @@ func respondWithJSON(w http.ResponseWriter, r *http.Request, code int, payload i
 	response, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("HTTP 500: Internal Server Error"))
 		return
 	}
 	w.WriteHeader(code)
 	w.Write(response)
 }
 
-// make sure block is valid by checking index, and comparing the hash of the previous block
-func isBlockValid(newBlock, oldBlock Block) bool {
+func isValidBlock(newBlock, oldBlock Block) bool {
 	if oldBlock.Index+1 != newBlock.Index {
 		return false
 	}
@@ -141,15 +129,14 @@ func isBlockValid(newBlock, oldBlock Block) bool {
 		return false
 	}
 
-	if calculateHash(newBlock) != newBlock.Hash {
+	if calcHash(newBlock) != newBlock.Hash {
 		return false
 	}
 
 	return true
 }
 
-// SHA256 hasing
-func calculateHash(block Block) string {
+func calcHash(block Block) string {
 	record := strconv.Itoa(block.Index) + block.Timestamp + block.Name + block.PrevHash
 	h := sha256.New()
 	h.Write([]byte(record))
@@ -157,18 +144,15 @@ func calculateHash(block Block) string {
 	return hex.EncodeToString(hashed)
 }
 
-// create a new block using previous block's hash
-func generateBlock(oldBlock Block, Name string) Block {
+func genBlock(oldBlock Block, Name string) Block {
 
 	var newBlock Block
 
-	t := time.Now()
-
 	newBlock.Index = oldBlock.Index + 1
-	newBlock.Timestamp = t.String()
+	newBlock.Timestamp = time.Now().String()
 	newBlock.Name = Name
 	newBlock.PrevHash = oldBlock.Hash
-	newBlock.Hash = calculateHash(newBlock)
+	newBlock.Hash = calcHash(newBlock)
 
 	return newBlock
 }
